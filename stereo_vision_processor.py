@@ -51,20 +51,21 @@ class StereoVisionProcessor:
 
         return self.calibrator.calibrate(objpoints, left_imgpoints, right_imgpoints)
 
+    # 在 stereo_vision_processor.py 中检查是否正确初始化了 stereo 匹配器
     def init_stereo_matcher(self):
-        """初始化立体匹配器"""
-        self.stereo = cv2.StereoSGBM_create(
-            minDisparity=1,
-            numDisparities=64,
-            blockSize=3,
-            P1=8 * 3 * 3 * 3,
-            P2=32 * 3 * 3 * 3,
-            disp12MaxDiff=-1,
-            preFilterCap=1,
-            uniquenessRatio=10,
-            speckleWindowSize=100,
-            speckleRange=100,
-            mode=cv2.STEREO_SGBM_MODE_HH)
+        if not hasattr(self, 'stereo') or self.stereo is None:
+            self.stereo = cv2.StereoSGBM_create(
+                minDisparity=1,
+                numDisparities=64,
+                blockSize=3,
+                P1=8 * 3 * 3 * 3,
+                P2=32 * 3 * 3 * 3,
+                disp12MaxDiff=-1,
+                preFilterCap=1,
+                uniquenessRatio=10,
+                speckleWindowSize=100,
+                speckleRange=100,
+                mode=cv2.STEREO_SGBM_MODE_HH)
 
     def process_frame(self, frame):
         """处理视频帧"""
@@ -74,42 +75,74 @@ class StereoVisionProcessor:
         if self.stereo is None:
             self.init_stereo_matcher()
 
-        # 分割左右图像
-        frame1 = frame[0:480, 0:640]  # 左图
-        frame2 = frame[0:480, 640:1280]  # 右图
+        # 验证输入帧
+        if frame is None or frame.size == 0:
+            raise ValueError("输入帧无效")
+        if frame.shape[0] != 480 or frame.shape[1] != 1280:
+            frame = cv2.resize(frame, (1280, 480))
 
-        # 转换为灰度图并校正
-        imgL = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-        imgR = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+        try:
+            # 分割左右图像
+            frame1 = frame[0:480, 0:640]  # 左图
+            frame2 = frame[0:480, 640:1280]  # 右图
 
-        img1_rectified = cv2.remap(imgL,
-                                   cv2.initUndistortRectifyMap(
-                                       self.calibrator.left_camera_matrix,
-                                       self.calibrator.left_distortion,
-                                       self.calibrator.R1,
-                                       self.calibrator.P1,
-                                       self.calibrator.size,
-                                       cv2.CV_16SC2)[0:2],
-                                   cv2.INTER_LINEAR)
+            # 转换为灰度图
+            imgL = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+            imgR = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
 
-        img2_rectified = cv2.remap(imgR,
-                                   cv2.initUndistortRectifyMap(
-                                       self.calibrator.right_camera_matrix,
-                                       self.calibrator.right_distortion,
-                                       self.calibrator.R2,
-                                       self.calibrator.P2,
-                                       self.calibrator.size,
-                                       cv2.CV_16SC2)[0:2],
-                                   cv2.INTER_LINEAR)
+            # 预计算校正映射（优化性能）
+            if not hasattr(self, 'map1x'):
+                self.map1x, self.map1y = cv2.initUndistortRectifyMap(
+                    self.calibrator.left_camera_matrix,
+                    self.calibrator.left_distortion,
+                    self.calibrator.R1,
+                    self.calibrator.P1,
+                    self.calibrator.size,
+                    cv2.CV_32FC1)  # 改用32位浮点提高精度
 
-        # 计算视差和3D坐标
-        disparity = self.stereo.compute(img1_rectified, img2_rectified)
-        threeD = cv2.reprojectImageTo3D(disparity, self.calibrator.Q, handleMissingValues=True)
-        threeD = threeD * 16
+                self.map2x, self.map2y = cv2.initUndistortRectifyMap(
+                    self.calibrator.right_camera_matrix,
+                    self.calibrator.right_distortion,
+                    self.calibrator.R2,
+                    self.calibrator.P2,
+                    self.calibrator.size,
+                    cv2.CV_32FC1)
 
-        # 生成可视化结果
-        gray_img = cv2.cvtColor(img1_rectified, cv2.COLOR_GRAY2BGR)
-        depth_img = cv2.normalize(disparity, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-        depth_img = cv2.applyColorMap(depth_img, cv2.COLORMAP_JET)
+            # 执行图像校正（修正参数顺序）
+            img1_rectified = cv2.remap(
+                imgL,
+                self.map1x,
+                self.map1y,
+                interpolation=cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_CONSTANT)
 
-        return frame1, gray_img, depth_img, threeD
+            img2_rectified = cv2.remap(
+                imgR,
+                self.map2x,
+                self.map2y,
+                interpolation=cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_CONSTANT)
+
+
+            # 计算视差
+            disparity = self.stereo.compute(img1_rectified, img2_rectified)
+
+            # 计算3D坐标
+            threeD = cv2.reprojectImageTo3D(
+                disparity,
+                self.calibrator.Q,
+                handleMissingValues=True)
+            threeD = threeD * 16  # 缩放因子
+
+            # 生成可视化结果
+            gray_img = cv2.cvtColor(img1_rectified, cv2.COLOR_GRAY2BGR)
+            depth_img = cv2.normalize(
+                disparity, None, 0, 255,
+                cv2.NORM_MINMAX, cv2.CV_8U)
+            depth_img = cv2.applyColorMap(depth_img, cv2.COLORMAP_JET)
+
+            return frame1, gray_img, depth_img, threeD
+
+        except Exception as e:
+            print(f"处理帧时出错: {str(e)}")
+            raise
