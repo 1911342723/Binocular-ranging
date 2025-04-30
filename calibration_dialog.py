@@ -1,3 +1,4 @@
+import re
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QSpinBox,
                              QDoubleSpinBox, QLabel, QPushButton, QLineEdit,
                              QHBoxLayout, QFileDialog, QTabWidget, QWidget,
@@ -83,61 +84,62 @@ class CalibrationDialog(QDialog):
     def setup_manual_tab(self, tab):
         layout = QVBoxLayout()
 
-        # 相机矩阵输入区域
-        cam_matrix_group = QGroupBox("相机内参矩阵 (Python列表格式)")
-        cam_matrix_layout = QHBoxLayout()
+        # 模板输入区域
+        template_group = QGroupBox("模板化输入")
+        template_layout = QVBoxLayout()
 
+        self.template_edit = QPlainTextEdit()
+        self.template_edit.setPlaceholderText("粘贴Python格式的标定参数，例如：\n"
+                                              "left_camera_matrix = np.array([...])\n"
+                                              "right_camera_matrix = np.array([...])\n"
+                                              "left_distortion = np.array([...])\n"
+                                              "right_distortion = np.array([...])\n"
+                                              "R = np.array([...])\n"
+                                              "T = np.array([...])")
+        self.template_edit.setFixedHeight(150)
+
+        load_template_btn = QPushButton("解析并填充参数")
+        load_template_btn.clicked.connect(self.parse_template)
+
+        template_layout.addWidget(self.template_edit)
+        template_layout.addWidget(load_template_btn)
+        template_group.setLayout(template_layout)
+
+        # 参数显示区域
+        param_group = QGroupBox("标定参数")
+        param_layout = QFormLayout()
+
+        # 左相机矩阵
         self.left_matrix_edit = QPlainTextEdit()
-        self.left_matrix_edit.setPlaceholderText("[[467.0490, 0, 340.5560],\n[0, 466.8152, 244.9560],\n[0, 0, 1]]")
-        self.left_matrix_edit.setFixedHeight(120)
+        self.left_matrix_edit.setFixedHeight(80)
+        param_layout.addRow("左相机矩阵:", self.left_matrix_edit)
 
+        # 右相机矩阵
         self.right_matrix_edit = QPlainTextEdit()
-        self.right_matrix_edit.setPlaceholderText("[[467.4363, 0, 310.0826],\n[0, 467.3342, 246.0312],\n[0, 0, 1]]")
-        self.right_matrix_edit.setFixedHeight(120)
+        self.right_matrix_edit.setFixedHeight(80)
+        param_layout.addRow("右相机矩阵:", self.right_matrix_edit)
 
-        cam_matrix_layout.addWidget(QLabel("左相机:"))
-        cam_matrix_layout.addWidget(self.left_matrix_edit)
-        cam_matrix_layout.addWidget(QLabel("右相机:"))
-        cam_matrix_layout.addWidget(self.right_matrix_edit)
-        cam_matrix_group.setLayout(cam_matrix_layout)
-
-        # 畸变参数输入区域
-        dist_group = QGroupBox("畸变参数 (Python列表格式)")
-        dist_layout = QHBoxLayout()
-
+        # 左畸变参数
         self.left_dist_edit = QLineEdit()
-        self.left_dist_edit.setPlaceholderText("[0.0645, -0.0989, 0, 0, 0]")
+        param_layout.addRow("左畸变参数:", self.left_dist_edit)
 
+        # 右畸变参数
         self.right_dist_edit = QLineEdit()
-        self.right_dist_edit.setPlaceholderText("[0.0543, -0.0681, 0, 0, 0]")
+        param_layout.addRow("右畸变参数:", self.right_dist_edit)
 
-        dist_layout.addWidget(QLabel("左相机:"))
-        dist_layout.addWidget(self.left_dist_edit)
-        dist_layout.addWidget(QLabel("右相机:"))
-        dist_layout.addWidget(self.right_dist_edit)
-        dist_group.setLayout(dist_layout)
-
-        # 外参矩阵输入区域
-        ext_group = QGroupBox("外参参数 (Python列表格式)")
-        ext_layout = QVBoxLayout()
-
+        # 旋转矩阵R
         self.r_matrix_edit = QPlainTextEdit()
-        self.r_matrix_edit.setPlaceholderText(
-            "[[0.9999, -0.0012, 0.0128],\n[0.0012, 0.9999, 0.0019],\n[-0.0128, -0.0019, 0.9999]]")
-        self.r_matrix_edit.setFixedHeight(120)
+        self.r_matrix_edit.setFixedHeight(80)
+        param_layout.addRow("旋转矩阵R:", self.r_matrix_edit)
 
+        # 平移向量T
         self.t_vector_edit = QLineEdit()
-        self.t_vector_edit.setPlaceholderText("[59.3051, 0.2422, -0.8870]")
+        param_layout.addRow("平移向量T:", self.t_vector_edit)
 
-        ext_layout.addWidget(QLabel("旋转矩阵R:"))
-        ext_layout.addWidget(self.r_matrix_edit)
-        ext_layout.addWidget(QLabel("平移向量T:"))
-        ext_layout.addWidget(self.t_vector_edit)
-        ext_group.setLayout(ext_layout)
+        param_group.setLayout(param_layout)
 
-        layout.addWidget(cam_matrix_group)
-        layout.addWidget(dist_group)
-        layout.addWidget(ext_group)
+        layout.addWidget(template_group)
+        layout.addWidget(param_group)
         tab.setLayout(layout)
 
     def create_browse_row(self, line_edit):
@@ -162,6 +164,116 @@ class CalibrationDialog(QDialog):
         except (ValueError, SyntaxError) as e:
             raise ValueError(f"解析错误: {str(e)}")
 
+    def parse_template(self):
+        """解析模板文本并填充到对应字段"""
+        try:
+            template_text = self.template_edit.toPlainText().strip()
+            if not template_text:
+                raise ValueError("模板内容为空")
+
+            # 创建安全的执行环境
+            safe_dict = {
+                'np': np,
+                'array': np.array,
+                'left_camera_matrix': None,
+                'right_camera_matrix': None,
+                'left_distortion': None,
+                'right_distortion': None,
+                'R': None,
+                'T': None
+            }
+
+            # 验证模板文本
+            forbidden = ['import', 'exec', 'eval', 'open', 'os.', 'sys.', 'subprocess.']
+            for word in forbidden:
+                if word in template_text.lower():
+                    raise ValueError(f"模板包含禁止的操作: {word}")
+
+            try:
+                # 先进行语法检查
+                ast.parse(template_text)
+
+                # 执行模板
+                exec(template_text, {'__builtins__': None, 'np': np}, safe_dict)
+            except SyntaxError as e:
+                raise ValueError(f"模板语法错误: {str(e)}")
+            except Exception as e:
+                raise ValueError(f"模板执行错误: {str(e)}")
+
+            # 提取并验证参数
+            required_params = {
+                'left_camera_matrix': (3, 3),
+                'right_camera_matrix': (3, 3),
+                'left_distortion': (5,),
+                'right_distortion': (5,),
+                'R': (3, 3),
+                'T': (3,)
+            }
+
+            extracted = {}
+            for name, shape in required_params.items():
+                value = safe_dict.get(name)
+                if value is None:
+                    raise ValueError(f"缺少参数: {name}")
+
+                try:
+                    arr = np.array(value, dtype=np.float64)
+                    if arr.shape != shape:
+                        raise ValueError(
+                            f"参数 {name} 形状应为 {shape}，实际为 {arr.shape}"
+                        )
+                    extracted[name] = arr
+                except Exception as e:
+                    raise ValueError(f"参数 {name} 格式错误: {str(e)}")
+
+            # 填充到UI控件
+            self.left_matrix_edit.setPlainText(self._format_matrix(extracted['left_camera_matrix']))
+            self.right_matrix_edit.setPlainText(self._format_matrix(extracted['right_camera_matrix']))
+            self.left_dist_edit.setText(self._format_array(extracted['left_distortion']))
+            self.right_dist_edit.setText(self._format_array(extracted['right_distortion']))
+            self.r_matrix_edit.setPlainText(self._format_matrix(extracted['R']))
+            self.t_vector_edit.setText(self._format_array(extracted['T']))
+
+            self.status_label.setStyleSheet("color: green;")
+            self.status_label.setText("模板解析成功！参数已填充")
+
+        except Exception as e:
+            self.status_label.setStyleSheet("color: red;")
+            self.status_label.setText(f"模板解析错误: {str(e)}")
+
+    def _format_matrix(self, matrix):
+        """格式化矩阵为可读字符串"""
+        return "[\n" + ",\n".join(["    [" + ", ".join(f"{x:.6f}" for x in row) + "]"
+                                   for row in np.array(matrix)]) + "\n]"
+
+    def _format_array(self, array):
+        """格式化数组为可读字符串"""
+        return "[" + ", ".join(f"{x:.6f}" for x in np.array(array).flatten()) + "]"
+
+    def preprocess_input(self, text):
+        """预处理输入文本"""
+        # 1. 标准化换行和空格
+        text = ' '.join(text.split())  # 合并所有空白字符为单个空格
+
+        # 2. 处理中文标点和特殊格式
+        replacements = {
+            '，': ',',
+            '；': ';',
+            '【': '[',
+            '】': ']',
+            '（': '(',
+            '）': ')',
+            '“': '"',
+            '”': '"'
+        }
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+
+        # 3. 移除不可见字符但保留必要的结构字符
+        keep_chars = set('0123456789.,-[] \t\n')
+        text = ''.join(c for c in text if c in keep_chars)
+
+        return text.strip()
     def validate_and_calibrate(self):
         if self.tab_widget.currentIndex() == 0:  # 自动标定模式
             left_dir = self.left_dir_edit.text()
@@ -179,46 +291,93 @@ class CalibrationDialog(QDialog):
                 self.square_size.value()
             )
             self.close()
-
-        else:  # 手动输入模式
+        else:  # 手动输入
             try:
-                # 解析左相机矩阵
-                left_matrix = np.array(self.safe_parse(self.left_matrix_edit.toPlainText()), dtype=np.float64)
+                # 预处理输入
+                left_matrix_text = self.preprocess_input(self.left_matrix_edit.toPlainText())
+                right_matrix_text = self.preprocess_input(self.right_matrix_edit.toPlainText())
+                left_dist_text = self.preprocess_input(self.left_dist_edit.text())
+                right_dist_text = self.preprocess_input(self.right_dist_edit.text())
+                r_matrix_text = self.preprocess_input(self.r_matrix_edit.toPlainText())
+                t_vector_text = self.preprocess_input(self.t_vector_edit.text())
 
-                # 解析右相机矩阵
-                right_matrix = np.array(self.safe_parse(self.right_matrix_edit.toPlainText()), dtype=np.float64)
-
-                # 解析畸变参数
-                left_dist = np.array(self.safe_parse(self.left_dist_edit.text()), dtype=np.float64)
-                right_dist = np.array(self.safe_parse(self.right_dist_edit.text()), dtype=np.float64)
-
-                # 解析外参
-                R = np.array(self.safe_parse(self.r_matrix_edit.toPlainText()), dtype=np.float64)
-                T = np.array(self.safe_parse(self.t_vector_edit.text()), dtype=np.float64)
-
-                # 验证矩阵形状
-                if left_matrix.shape != (3, 3) or right_matrix.shape != (3, 3):
-                    raise ValueError("相机矩阵必须是3x3的矩阵")
-                if left_dist.shape != (5,) and left_dist.shape != (5, 1):
-                    raise ValueError("左相机畸变参数必须是5个元素")
-                if right_dist.shape != (5,) and right_dist.shape != (5, 1):
-                    raise ValueError("右相机畸变参数必须是5个元素")
-                if R.shape != (3, 3):
-                    raise ValueError("旋转矩阵必须是3x3")
-                if T.shape != (3,) and T.shape != (3, 1):
-                    raise ValueError("平移向量必须是3维")
+                # 解析参数
+                left_matrix = self.parse_matrix(left_matrix_text)
+                right_matrix = self.parse_matrix(right_matrix_text)
+                left_dist = self.parse_array(left_dist_text)
+                right_dist = self.parse_array(right_dist_text)
+                R = self.parse_matrix(r_matrix_text)
+                T = self.parse_array(t_vector_text)
 
                 # 传递给主窗口
                 self.parent().set_manual_calibration(
-                    left_matrix, left_dist.flatten(),
-                    right_matrix, right_dist.flatten(),
-                    R, T.flatten()
+                    left_matrix, left_dist,
+                    right_matrix, right_dist,
+                    R, T
                 )
-                self.status_label.setStyleSheet("color: green;")
-                self.status_label.setText("手动参数设置成功！")
                 self.close()
 
             except Exception as e:
                 self.status_label.setStyleSheet("color: red;")
                 self.status_label.setText(f"参数错误: {str(e)}")
+                # 在控制台打印详细错误
+                import traceback
+                traceback.print_exc()
+
+    def parse_matrix(self, text):
+        """解析文本形式的矩阵为numpy数组"""
+        try:
+            # 1. 清理输入：移除所有非必要字符
+            cleaned = re.sub(r'[^\d\.,\-$$$$]', ' ', text)  # 保留数字、点、逗号、负号和方括号
+
+            # 2. 提取所有数字
+            numbers = []
+            for token in cleaned.split():
+                # 处理每个可能是数字的token
+                token = token.strip('[],')  # 移除可能附着在数字上的符号
+                if token:
+                    try:
+                        numbers.append(float(token))
+                    except ValueError:
+                        continue
+
+            # 3. 验证数字数量
+            if len(numbers) != 9:
+                raise ValueError(f"需要9个数字，找到{len(numbers)}个")
+
+            # 4. 构建3x3矩阵
+            matrix = np.array(numbers, dtype=np.float64).reshape(3, 3)
+
+            return matrix
+
+        except Exception as e:
+            raise ValueError(
+                f"矩阵解析失败: {str(e)}\n原始输入: '{text}'\n提取到的数字: {numbers if 'numbers' in locals() else '无'}")
+
+    def parse_array(self, text):
+        """解析文本形式的向量为numpy数组"""
+        try:
+            # 更严格的清理和验证
+            cleaned = re.sub(r'[^\d\.,-]', '', text)  # 只保留数字、逗号、点和负号
+            if not cleaned:
+                return None
+
+            # 处理可能的中文逗号或空格分隔
+            elements = []
+            for num in re.split(r'[,，\s]+', cleaned):
+                if num:  # 跳过空字符串
+                    try:
+                        # 处理可能的千位分隔符
+                        num = num.replace(',', '').replace('，', '')
+                        elements.append(float(num))
+                    except ValueError:
+                        continue
+
+            if not elements:
+                raise ValueError("未找到有效的数字")
+
+            return np.array(elements, dtype=np.float64)
+
+        except Exception as e:
+            raise ValueError(f"向量解析失败: {str(e)}\n原始输入: '{text}'")
 

@@ -4,12 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3322315e-1112-4418-bad9-64d78d3a93d7" name="更改" comment="第二次提交，可以测距了但是生成质量差，大部分为红色">
+    <list default="true" id="3322315e-1112-4418-bad9-64d78d3a93d7" name="更改" comment="第四次提交，完成标定和测试功能">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/calibration_dialog.py" beforeDir="false" afterPath="$PROJECT_DIR$/calibration_dialog.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/camera_calibrator.py" beforeDir="false" afterPath="$PROJECT_DIR$/camera_calibrator.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main_window.py" beforeDir="false" afterPath="$PROJECT_DIR$/main_window.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/stereo_vision_processor.py" beforeDir="false" afterPath="$PROJECT_DIR$/stereo_vision_processor.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -236,7 +233,15 @@
       <option name="project" value="LOCAL" />
       <updated>1745940516662</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="第四次提交，完成标定和测试功能">
+      <option name="closed" value="true" />
+      <created>1745998383468</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1745998383468</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -247,14 +252,15 @@
     <MESSAGE value="删除不必要的文件,优化目录结构" />
     <MESSAGE value="第二次提交，可以测距了但是生成质量差，大部分为红色" />
     <MESSAGE value="测试分支" />
-    <option name="LAST_COMMIT_MESSAGE" value="测试分支" />
+    <MESSAGE value="第四次提交，完成标定和测试功能" />
+    <option name="LAST_COMMIT_MESSAGE" value="第四次提交，完成标定和测试功能" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/SGBM$sgbm_video.coverage" NAME="sgbm-video 覆盖结果" MODIFIED="1745571602414" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/SGBM$test.coverage" NAME="test 覆盖结果" MODIFIED="1745938617356" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/SGBM$main_window.coverage" NAME="main_window 覆盖结果" MODIFIED="1745981393093" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/SGBM$main__2_.coverage" NAME="main (2) 覆盖结果" MODIFIED="1745991352556" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/参考代码/BM_find_distance（测距）" />
-    <SUITE FILE_PATH="coverage/SGBM$main.coverage" NAME="main 覆盖结果" MODIFIED="1745997341608" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/SGBM$main.coverage" NAME="main 覆盖结果" MODIFIED="1745999632266" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/SGBM$stereo_vision_processor.coverage" NAME="stereo_vision_processor 覆盖结果" MODIFIED="1745928194256" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/SGBM$main__1_.coverage" NAME="main (1) 覆盖结果" MODIFIED="1745991208308" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/参考代码/Depth（深度图）" />
   </component>
