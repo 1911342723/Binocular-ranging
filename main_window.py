@@ -5,9 +5,9 @@ import numpy as np
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QComboBox, QPushButton,
                              QTextEdit, QFileDialog, QDialog, QFormLayout,
-                             QSpinBox, QDoubleSpinBox, QMessageBox, QLineEdit, QStackedLayout)
-from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtGui import QImage, QPixmap
+                             QSpinBox, QDoubleSpinBox, QMessageBox, QLineEdit, QStackedLayout, QGridLayout)
+from PyQt5.QtCore import QTimer, Qt, QPoint
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen
 from stereo_vision_processor import StereoVisionProcessor
 from calibration_dialog import CalibrationDialog
 
@@ -42,71 +42,164 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        # 主布局
-        main_layout = QHBoxLayout()
+        # 主布局 - 使用网格布局更灵活
+        main_layout = QGridLayout()
         central_widget.setLayout(main_layout)
 
-        # 左侧布局 (原始视频)
-        left_layout = QVBoxLayout()
+        # 左侧布局 (原始视频) - 使用嵌套布局实现居中
+        left_container = QWidget()
+        left_layout = QVBoxLayout(left_container)
+        left_layout.setAlignment(Qt.AlignCenter)  # 使内容居中
 
-        # 设置固定大小的原始视频标签
+        # 原始视频标签
         self.original_label = QLabel("原始视频")
         self.original_label.setAlignment(Qt.AlignCenter)
-        self.original_label.setStyleSheet("border: 1px solid black;")
+        self.original_label.setStyleSheet("""
+            QLabel {
+                border: 2px solid #3498db;
+                border-radius: 5px;
+                background-color: #f8f9fa;
+                padding: 5px;
+            }
+        """)
         self.original_label.setFixedSize(640, 480)
+
         left_layout.addWidget(self.original_label)
-        left_layout.addStretch()  # 添加拉伸因子保持布局稳定
+        left_layout.addStretch()
 
         # 右侧布局 (处理结果)
-        right_layout = QVBoxLayout()
+        right_container = QWidget()
+        right_layout = QVBoxLayout(right_container)
 
-        # 显示模式选择
+        # 显示模式选择 - 美化样式
         self.mode_combo = QComboBox()
         self.mode_combo.addItems(["灰度图", "深度图", "点云"])
+        self.mode_combo.setStyleSheet("""
+            QComboBox {
+                min-height: 30px;
+                padding: 5px;
+                font-size: 14px;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+            }
+        """)
         self.mode_combo.currentTextChanged.connect(self.update_display_mode)
         right_layout.addWidget(self.mode_combo)
 
-        # 创建一个容器widget来容纳结果视图
+        # 结果视图容器
         self.result_container = QWidget()
         self.result_container.setFixedSize(640, 480)
         self.result_layout = QStackedLayout()
         self.result_container.setLayout(self.result_layout)
 
-        # 添加所有视图到堆叠布局
+        # 美化结果视图
         self.result_label = QLabel("处理结果")
         self.result_label.setAlignment(Qt.AlignCenter)
-        self.result_label.setStyleSheet("border: 1px solid black;")
+        self.result_label.setStyleSheet("""
+            QLabel {
+                border: 2px solid #2ecc71;
+                border-radius: 5px;
+                background-color: #f8f9fa;
+                padding: 5px;
+            }
+        """)
         self.result_label.mousePressEvent = self.show_distance
 
         self.point_cloud_view = QLabel("点云显示")
         self.point_cloud_view.setAlignment(Qt.AlignCenter)
-        self.point_cloud_view.setStyleSheet("border: 1px solid black;")
+        self.point_cloud_view.setStyleSheet("""
+            QLabel {
+                border: 2px solid #e74c3c;
+                border-radius: 5px;
+                background-color: #f8f9fa;
+                padding: 5px;
+            }
+        """)
 
-        self.result_layout.addWidget(self.result_label)  # 索引0
-        self.result_layout.addWidget(self.point_cloud_view)  # 索引1
-
+        self.result_layout.addWidget(self.result_label)
+        self.result_layout.addWidget(self.point_cloud_view)
         right_layout.addWidget(self.result_container)
 
-        # 距离信息
+        # 距离信息显示 - 美化样式
         self.distance_text = QTextEdit()
         self.distance_text.setReadOnly(True)
+        self.distance_text.setAlignment(Qt.AlignCenter)  # 设置默认居中
         self.distance_text.setPlaceholderText("点击深度图显示距离信息...")
+        self.distance_text.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #95a5a6;
+                border-radius: 4px;
+                padding: 8px;
+                font-size: 13px;
+                background-color: #f8f9fa;
+            }
+        """)
         right_layout.addWidget(self.distance_text)
 
-        # 状态和按钮
+        # 状态和按钮区域
+        control_panel = QWidget()
+        control_layout = QVBoxLayout(control_panel)
+
+        # 状态标签美化
         self.calib_status = QLabel("状态: 未标定")
+        self.calib_status.setStyleSheet("""
+            QLabel {
+                font-size: 14px;
+                padding: 8px;
+                border-radius: 4px;
+                background-color: #f39c12;
+                color: white;
+            }
+        """)
+
+        # 视频路径显示
         self.video_path_label = QLineEdit()
         self.video_path_label.setReadOnly(True)
         self.video_path_label.setPlaceholderText("未选择视频文件")
+        self.video_path_label.setStyleSheet("""
+            QLineEdit {
+                padding: 6px;
+                border: 1px solid #bdc3c7;
+                border-radius: 4px;
+                background-color: #ecf0f1;
+            }
+        """)
 
+        # 按钮布局 - 美化按钮
         btn_layout = QHBoxLayout()
+
         self.calibrate_btn = QPushButton("标定相机")
-        self.calibrate_btn.clicked.connect(self.show_calibration_dialog)
-
         self.select_video_btn = QPushButton("选择视频")
-        self.select_video_btn.clicked.connect(self.select_video_file)
-
         self.play_btn = QPushButton("播放")
+
+        # 统一按钮样式
+        button_style = """
+            QPushButton {
+                min-height: 35px;
+                padding: 8px 15px;
+                font-size: 14px;
+                border: none;
+                border-radius: 4px;
+                background-color: #3498db;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #1a5276;
+            }
+            QPushButton:disabled {
+                background-color: #95a5a6;
+            }
+        """
+
+        self.calibrate_btn.setStyleSheet(button_style)
+        self.select_video_btn.setStyleSheet(button_style)
+        self.play_btn.setStyleSheet(button_style)
+
+        self.calibrate_btn.clicked.connect(self.show_calibration_dialog)
+        self.select_video_btn.clicked.connect(self.select_video_file)
         self.play_btn.clicked.connect(self.toggle_playback)
         self.play_btn.setEnabled(False)
 
@@ -114,14 +207,19 @@ class MainWindow(QMainWindow):
         btn_layout.addWidget(self.select_video_btn)
         btn_layout.addWidget(self.play_btn)
 
-        right_layout.addWidget(self.calib_status)
-        right_layout.addWidget(QLabel("当前视频:"))
-        right_layout.addWidget(self.video_path_label)
-        right_layout.addLayout(btn_layout)
+        control_layout.addWidget(self.calib_status)
+        control_layout.addWidget(QLabel("当前视频:"))
+        control_layout.addWidget(self.video_path_label)
+        control_layout.addLayout(btn_layout)
+        right_layout.addWidget(control_panel)
 
-        # 合并布局
-        main_layout.addLayout(left_layout)
-        main_layout.addLayout(right_layout)
+        # 合并布局 - 设置间距和边距
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
+        main_layout.addWidget(left_container, 0, 0, Qt.AlignCenter)  # 左列居中
+        main_layout.addWidget(right_container, 0, 1)
+        main_layout.setColumnStretch(0, 1)
+        main_layout.setColumnStretch(1, 1)
 
     def select_video_file(self):
         """选择视频文件"""
@@ -255,26 +353,65 @@ class MainWindow(QMainWindow):
             print(f"处理帧时出错: {str(e)}")
 
     def show_distance(self, event):
-        """显示点击位置的深度信息"""
-        if self.current_mode == "深度图" and hasattr(self, 'threeD') and self.threeD is not None:
-            # 获取标签尺寸和图像尺寸
+        """显示点击位置的深度信息（优化版，解决闪烁和内存问题）"""
+        try:
+            if self.current_mode != "深度图" or not hasattr(self, 'threeD') or self.threeD is None:
+                return
+
+            # 获取当前显示的pixmap
+            current_pixmap = self.result_label.pixmap()
+            if not current_pixmap:
+                return
+
+            # 计算点击位置对应的图像坐标
             label_size = self.result_label.size()
-            img_height, img_width = self.threeD.shape[:2]
+            img_size = current_pixmap.size()
+            scale_x = img_size.width() / label_size.width()
+            scale_y = img_size.height() / label_size.height()
 
-            # 计算缩放比例
-            scale_x = img_width / label_size.width()
-            scale_y = img_height / label_size.height()
-
-            # 转换坐标
             x = int(event.pos().x() * scale_x)
             y = int(event.pos().y() * scale_y)
 
             # 边界检查
-            if 0 <= x < img_width and 0 <= y < img_height:
-                distance = np.linalg.norm(self.threeD[y][x]) / 1000  # 转换为米
-                self.distance_text.clear()
-                self.distance_text.append(f"点击位置: x={x}, y={y}")
-                self.distance_text.append(f"距离: {distance:.2f} 米")
+            if not (0 <= x < img_size.width() and 0 <= y < img_size.height()):
+                return
+
+            # 获取3D坐标信息
+            point_3d = self.threeD[y][x]
+            distance = np.linalg.norm(point_3d) / 1000  # 转换为米
+
+            # 更新信息显示（居中）
+            self.distance_text.clear()
+            self.distance_text.setAlignment(Qt.AlignCenter)  # 设置文字居中
+            self.distance_text.append("=== 点击位置信息 ===")
+            self.distance_text.append(f"像素坐标: (x={x}, y={y})")
+            self.distance_text.append(
+                f"世界坐标: (X={point_3d[0] / 1000:.3f}m, Y={point_3d[1] / 1000:.3f}m, Z={point_3d[2] / 1000:.3f}m)")
+            self.distance_text.append(f"距离相机距离: {distance:.3f} 米")
+
+            # 创建带标记的新图像（使用原始图像副本）
+            marked_pixmap = current_pixmap.copy()
+
+            # 使用try-finally确保QPainter正确释放
+            painter = QPainter(marked_pixmap)
+            try:
+                painter.setRenderHint(QPainter.Antialiasing)
+                painter.setPen(QPen(Qt.red, 3))
+                painter.drawEllipse(QPoint(int(event.pos().x()), int(event.pos().y())), 5, 5)
+            finally:
+                painter.end()
+
+            # 更新显示（原子操作）
+            self.result_label.setPixmap(marked_pixmap)
+
+            # 保存原始图像引用（防止被垃圾回收）
+            self._last_valid_pixmap = current_pixmap
+
+        except Exception as e:
+            print(f"显示深度信息时出错: {str(e)}")
+            # 出错时恢复原始图像
+            if hasattr(self, '_last_valid_pixmap'):
+                self.result_label.setPixmap(self._last_valid_pixmap)
 
     def update_display_mode(self, mode):
         """更新显示模式"""

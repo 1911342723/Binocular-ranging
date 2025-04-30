@@ -1,8 +1,10 @@
 import re
+from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QSpinBox,
                              QDoubleSpinBox, QLabel, QPushButton, QLineEdit,
                              QHBoxLayout, QFileDialog, QTabWidget, QWidget,
-                             QGroupBox, QPlainTextEdit)
+                             QGroupBox, QPlainTextEdit, QFrame, QDialogButtonBox,
+                             QScrollArea)
 from PyQt5.QtCore import Qt
 import numpy as np
 import ast
@@ -12,77 +14,211 @@ import os
 class CalibrationDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("相机标定")
-        self.setFixedSize(800, 600)
+        self.setWindowTitle("相机标定设置")
+        self.setFixedSize(900, 700)
         self.setup_ui()
+        self.setup_styles()
 
     def setup_ui(self):
-        layout = QVBoxLayout()
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
 
         # 创建选项卡
         self.tab_widget = QTabWidget()
+        self.tab_widget.setFont(QFont("Arial", 10))
 
         # 1. 自动标定标签页
         auto_tab = QWidget()
         self.setup_auto_tab(auto_tab)
-        self.tab_widget.addTab(auto_tab, "自动标定")
+        self.tab_widget.addTab(auto_tab, "🔄 自动标定")
 
         # 2. 手动输入标签页
         manual_tab = QWidget()
         self.setup_manual_tab(manual_tab)
-        self.tab_widget.addTab(manual_tab, "手动输入")
+        self.tab_widget.addTab(manual_tab, "✏️ 手动输入")
 
-        layout.addWidget(self.tab_widget)
+        main_layout.addWidget(self.tab_widget)
 
-        # 状态标签和按钮
+        # 添加分隔线
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        main_layout.addWidget(separator)
+
+        # 状态标签
         self.status_label = QLabel("准备标定...")
         self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("font-size: 14px;")
         self.status_label.setWordWrap(True)
+        self.status_label.setStyleSheet("""
+            QLabel {
+                font-size: 13px;
+                padding: 10px;
+                border-radius: 5px;
+                background-color: #f5f5f5;
+            }
+        """)
+        main_layout.addWidget(self.status_label)
 
-        calibrate_btn = QPushButton("应用标定参数")
-        calibrate_btn.setStyleSheet("font-size: 14px; height: 30px;")
-        calibrate_btn.clicked.connect(self.validate_and_calibrate)
+        # 按钮布局
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(15)
 
-        layout.addWidget(self.status_label)
-        layout.addWidget(calibrate_btn)
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setObjectName("cancelButton")
+        cancel_btn.clicked.connect(self.reject)
 
-        self.setLayout(layout)
+        self.calibrate_btn = QPushButton("应用标定参数")
+        self.calibrate_btn.setObjectName("applyButton")
+        self.calibrate_btn.clicked.connect(self.validate_and_calibrate)
+
+        btn_layout.addStretch(1)
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(self.calibrate_btn)
+
+        main_layout.addLayout(btn_layout)
+        self.setLayout(main_layout)
+
+    def setup_styles(self):
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f9f9f9;
+            }
+            QTabWidget::pane {
+                border: 1px solid #d4d4d4;
+                border-radius: 4px;
+                padding: 10px;
+                background: white;
+            }
+            QTabBar::tab {
+                padding: 8px 15px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                background: #e0e0e0;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background: white;
+                border-bottom: 2px solid #3498db;
+            }
+            QGroupBox {
+                border: 1px solid #d4d4d4;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 15px;
+                font-weight: bold;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 3px;
+            }
+            QPushButton {
+                min-width: 80px;
+                padding: 8px 15px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton#applyButton {
+                background-color: #3498db;
+                color: white;
+            }
+            QPushButton#applyButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton#cancelButton {
+                background-color: #e0e0e0;
+            }
+            QPushButton#cancelButton:hover {
+                background-color: #d0d0d0;
+            }
+            QLineEdit, QPlainTextEdit {
+                border: 1px solid #d4d4d4;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QPlainTextEdit {
+                font-family: Consolas, Courier New, monospace;
+            }
+            QSpinBox, QDoubleSpinBox {
+                padding: 5px;
+            }
+        """)
 
     def setup_auto_tab(self, tab):
-        layout = QVBoxLayout()
-        form = QFormLayout()
+        # 创建滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(15)
 
         # 图像目录选择
-        self.left_dir_edit = QLineEdit()
-        self.right_dir_edit = QLineEdit()
+        dir_group = QGroupBox("图像目录设置")
+        dir_layout = QFormLayout()
+        dir_layout.setLabelAlignment(Qt.AlignRight)
+        dir_layout.setSpacing(15)
 
-        form.addRow("左相机图像目录:", self.create_browse_row(self.left_dir_edit))
-        form.addRow("右相机图像目录:", self.create_browse_row(self.right_dir_edit))
+        self.left_dir_edit = QLineEdit()
+        self.left_dir_edit.setPlaceholderText("左相机图像目录路径")
+        self.right_dir_edit = QLineEdit()
+        self.right_dir_edit.setPlaceholderText("右相机图像目录路径")
+
+        dir_layout.addRow("左相机图像目录:", self.create_browse_row(self.left_dir_edit))
+        dir_layout.addRow("右相机图像目录:", self.create_browse_row(self.right_dir_edit))
+
+        dir_group.setLayout(dir_layout)
+        layout.addWidget(dir_group)
 
         # 棋盘格参数
+        chess_group = QGroupBox("棋盘格参数")
+        chess_layout = QFormLayout()
+        chess_layout.setLabelAlignment(Qt.AlignRight)
+        chess_layout.setSpacing(15)
+
         self.rows_spin = QSpinBox()
         self.rows_spin.setRange(2, 20)
         self.rows_spin.setValue(9)
+        self.rows_spin.setToolTip("棋盘格内部角点的行数")
 
         self.cols_spin = QSpinBox()
         self.cols_spin.setRange(2, 20)
         self.cols_spin.setValue(6)
+        self.cols_spin.setToolTip("棋盘格内部角点的列数")
 
         self.square_size = QDoubleSpinBox()
         self.square_size.setRange(1, 100)
         self.square_size.setValue(25.0)
         self.square_size.setSuffix(" mm")
+        self.square_size.setToolTip("棋盘格每个方格的实际物理尺寸")
 
-        form.addRow("棋盘格行数(内角点):", self.rows_spin)
-        form.addRow("棋盘格列数(内角点):", self.cols_spin)
-        form.addRow("方格实际尺寸:", self.square_size)
+        chess_layout.addRow("棋盘格行数(内角点):", self.rows_spin)
+        chess_layout.addRow("棋盘格列数(内角点):", self.cols_spin)
+        chess_layout.addRow("方格实际尺寸:", self.square_size)
 
-        layout.addLayout(form)
-        tab.setLayout(layout)
+        chess_group.setLayout(chess_layout)
+        layout.addWidget(chess_group)
+        layout.addStretch(1)
+
+        container.setLayout(layout)
+        scroll.setWidget(container)
+
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.addWidget(scroll)
 
     def setup_manual_tab(self, tab):
-        layout = QVBoxLayout()
+        # 创建滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(15)
 
         # 模板输入区域
         template_group = QGroupBox("模板化输入")
@@ -90,63 +226,144 @@ class CalibrationDialog(QDialog):
 
         self.template_edit = QPlainTextEdit()
         self.template_edit.setPlaceholderText("粘贴Python格式的标定参数，例如：\n"
-                                              "left_camera_matrix = np.array([...])\n"
+                                              "left_camera_matrix = np.array([\n"
+                                              "    [fx, 0, cx],\n"
+                                              "    [0, fy, cy],\n"
+                                              "    [0, 0, 1]\n"
+                                              "])\n"
                                               "right_camera_matrix = np.array([...])\n"
-                                              "left_distortion = np.array([...])\n"
+                                              "left_distortion = np.array([k1, k2, p1, p2, k3])\n"
                                               "right_distortion = np.array([...])\n"
-                                              "R = np.array([...])\n"
-                                              "T = np.array([...])")
-        self.template_edit.setFixedHeight(150)
+                                              "R = np.array([...])  # 旋转矩阵\n"
+                                              "T = np.array([...])  # 平移向量")
+        self.template_edit.setFixedHeight(180)
+        self.template_edit.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.template_edit.setFont(QFont("Consolas", 10))
 
         load_template_btn = QPushButton("解析并填充参数")
+        load_template_btn.setObjectName("parseButton")
         load_template_btn.clicked.connect(self.parse_template)
+        load_template_btn.setStyleSheet("""
+            QPushButton#parseButton {
+                background-color: #2ecc71;
+                color: white;
+            }
+            QPushButton#parseButton:hover {
+                background-color: #27ae60;
+            }
+        """)
 
         template_layout.addWidget(self.template_edit)
         template_layout.addWidget(load_template_btn)
         template_group.setLayout(template_layout)
+        layout.addWidget(template_group)
 
         # 参数显示区域
         param_group = QGroupBox("标定参数")
         param_layout = QFormLayout()
+        param_layout.setLabelAlignment(Qt.AlignRight)
+        param_layout.setSpacing(15)
 
         # 左相机矩阵
         self.left_matrix_edit = QPlainTextEdit()
-        self.left_matrix_edit.setFixedHeight(80)
+        self.left_matrix_edit.setFixedHeight(100)
+        self.left_matrix_edit.setFont(QFont("Consolas", 9))
         param_layout.addRow("左相机矩阵:", self.left_matrix_edit)
 
         # 右相机矩阵
         self.right_matrix_edit = QPlainTextEdit()
-        self.right_matrix_edit.setFixedHeight(80)
+        self.right_matrix_edit.setFixedHeight(100)
+        self.right_matrix_edit.setFont(QFont("Consolas", 9))
         param_layout.addRow("右相机矩阵:", self.right_matrix_edit)
 
+        # 畸变参数行
+        dist_layout = QHBoxLayout()
+        dist_layout.setSpacing(15)
+
         # 左畸变参数
-        self.left_dist_edit = QLineEdit()
-        param_layout.addRow("左畸变参数:", self.left_dist_edit)
+        left_dist_group = QGroupBox("左相机畸变参数")
+        left_dist_layout = QVBoxLayout()
+        self.left_dist_edit = QPlainTextEdit()
+        self.left_dist_edit.setFixedHeight(60)
+        self.left_dist_edit.setFont(QFont("Consolas", 9))
+        left_dist_layout.addWidget(self.left_dist_edit)
+        left_dist_group.setLayout(left_dist_layout)
 
         # 右畸变参数
-        self.right_dist_edit = QLineEdit()
-        param_layout.addRow("右畸变参数:", self.right_dist_edit)
+        right_dist_group = QGroupBox("右相机畸变参数")
+        right_dist_layout = QVBoxLayout()
+        self.right_dist_edit = QPlainTextEdit()
+        self.right_dist_edit.setFixedHeight(60)
+        self.right_dist_edit.setFont(QFont("Consolas", 9))
+        right_dist_layout.addWidget(self.right_dist_edit)
+        right_dist_group.setLayout(right_dist_layout)
+
+        dist_layout.addWidget(left_dist_group)
+        dist_layout.addWidget(right_dist_group)
+        param_layout.addRow(dist_layout)
+
+        # 外参行
+        ext_layout = QHBoxLayout()
+        ext_layout.setSpacing(15)
 
         # 旋转矩阵R
+        r_group = QGroupBox("旋转矩阵 R")
+        r_layout = QVBoxLayout()
         self.r_matrix_edit = QPlainTextEdit()
-        self.r_matrix_edit.setFixedHeight(80)
-        param_layout.addRow("旋转矩阵R:", self.r_matrix_edit)
+        self.r_matrix_edit.setFixedHeight(100)
+        self.r_matrix_edit.setFont(QFont("Consolas", 9))
+        r_layout.addWidget(self.r_matrix_edit)
+        r_group.setLayout(r_layout)
 
         # 平移向量T
-        self.t_vector_edit = QLineEdit()
-        param_layout.addRow("平移向量T:", self.t_vector_edit)
+        t_group = QGroupBox("平移向量 T")
+        t_layout = QVBoxLayout()
+        self.t_vector_edit = QPlainTextEdit()
+        self.t_vector_edit.setFixedHeight(60)
+        self.t_vector_edit.setFont(QFont("Consolas", 9))
+        t_layout.addWidget(self.t_vector_edit)
+        t_group.setLayout(t_layout)
+
+        ext_layout.addWidget(r_group)
+        ext_layout.addWidget(t_group)
+        param_layout.addRow(ext_layout)
 
         param_group.setLayout(param_layout)
-
-        layout.addWidget(template_group)
         layout.addWidget(param_group)
-        tab.setLayout(layout)
+        layout.addStretch(1)
+
+        container.setLayout(layout)
+        scroll.setWidget(container)
+
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.addWidget(scroll)
 
     def create_browse_row(self, line_edit):
         row = QHBoxLayout()
-        row.addWidget(line_edit)
+        row.setSpacing(10)
+
+        line_edit.setStyleSheet("""
+            QLineEdit {
+                padding: 8px;
+                border: 1px solid #d4d4d4;
+                border-radius: 4px;
+            }
+        """)
+
         btn = QPushButton("浏览...")
+        btn.setStyleSheet("""
+            QPushButton {
+                padding: 8px 15px;
+                background-color: #e0e0e0;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #d0d0d0;
+            }
+        """)
         btn.clicked.connect(lambda: self.browse_directory(line_edit))
+
+        row.addWidget(line_edit, stretch=1)
         row.addWidget(btn)
         return row
 
@@ -226,13 +443,13 @@ class CalibrationDialog(QDialog):
                 except Exception as e:
                     raise ValueError(f"参数 {name} 格式错误: {str(e)}")
 
-            # 填充到UI控件
+            # 填充到UI控件 - 使用 setPlainText 而不是 setText
             self.left_matrix_edit.setPlainText(self._format_matrix(extracted['left_camera_matrix']))
             self.right_matrix_edit.setPlainText(self._format_matrix(extracted['right_camera_matrix']))
-            self.left_dist_edit.setText(self._format_array(extracted['left_distortion']))
-            self.right_dist_edit.setText(self._format_array(extracted['right_distortion']))
+            self.left_dist_edit.setPlainText(self._format_array(extracted['left_distortion']))
+            self.right_dist_edit.setPlainText(self._format_array(extracted['right_distortion']))
             self.r_matrix_edit.setPlainText(self._format_matrix(extracted['R']))
-            self.t_vector_edit.setText(self._format_array(extracted['T']))
+            self.t_vector_edit.setPlainText(self._format_array(extracted['T']))
 
             self.status_label.setStyleSheet("color: green;")
             self.status_label.setText("模板解析成功！参数已填充")
@@ -274,6 +491,7 @@ class CalibrationDialog(QDialog):
         text = ''.join(c for c in text if c in keep_chars)
 
         return text.strip()
+
     def validate_and_calibrate(self):
         if self.tab_widget.currentIndex() == 0:  # 自动标定模式
             left_dir = self.left_dir_edit.text()
@@ -293,13 +511,13 @@ class CalibrationDialog(QDialog):
             self.close()
         else:  # 手动输入
             try:
-                # 预处理输入
+                # 预处理输入 - 使用 toPlainText() 获取 QPlainTextEdit 的内容
                 left_matrix_text = self.preprocess_input(self.left_matrix_edit.toPlainText())
                 right_matrix_text = self.preprocess_input(self.right_matrix_edit.toPlainText())
-                left_dist_text = self.preprocess_input(self.left_dist_edit.text())
-                right_dist_text = self.preprocess_input(self.right_dist_edit.text())
+                left_dist_text = self.preprocess_input(self.left_dist_edit.toPlainText())
+                right_dist_text = self.preprocess_input(self.right_dist_edit.toPlainText())
                 r_matrix_text = self.preprocess_input(self.r_matrix_edit.toPlainText())
-                t_vector_text = self.preprocess_input(self.t_vector_edit.text())
+                t_vector_text = self.preprocess_input(self.t_vector_edit.toPlainText())
 
                 # 解析参数
                 left_matrix = self.parse_matrix(left_matrix_text)
@@ -320,7 +538,6 @@ class CalibrationDialog(QDialog):
             except Exception as e:
                 self.status_label.setStyleSheet("color: red;")
                 self.status_label.setText(f"参数错误: {str(e)}")
-                # 在控制台打印详细错误
                 import traceback
                 traceback.print_exc()
 
@@ -328,12 +545,11 @@ class CalibrationDialog(QDialog):
         """解析文本形式的矩阵为numpy数组"""
         try:
             # 1. 清理输入：移除所有非必要字符
-            cleaned = re.sub(r'[^\d\.,\-$$$$]', ' ', text)  # 保留数字、点、逗号、负号和方括号
+            cleaned = re.sub(r'[^\d\.,\-]', ' ', text)  # 保留数字、点、逗号、负号
 
             # 2. 提取所有数字
             numbers = []
             for token in cleaned.split():
-                # 处理每个可能是数字的token
                 token = token.strip('[],')  # 移除可能附着在数字上的符号
                 if token:
                     try:
@@ -380,4 +596,3 @@ class CalibrationDialog(QDialog):
 
         except Exception as e:
             raise ValueError(f"向量解析失败: {str(e)}\n原始输入: '{text}'")
-
