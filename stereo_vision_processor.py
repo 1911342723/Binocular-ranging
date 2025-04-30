@@ -133,3 +133,37 @@ class StereoVisionProcessor:
         except Exception as e:
             print(f"处理帧时出错: {str(e)}")
             raise
+
+    # 在StereoVisionProcessor类中添加点云生成方法
+    def generate_point_cloud(self, threeD):
+        """生成点云可视化图像"""
+        # 提取有效点（去除无穷远点）
+        mask = (threeD[:, :, 2] < 5000) & (threeD[:, :, 2] > 0)  # 5米以内的点
+        points = threeD[mask]
+
+        if len(points) == 0:
+            return np.zeros((480, 640, 3), dtype=np.uint8)
+
+        # 归一化坐标用于可视化
+        z = points[:, 2]
+        z = (z - z.min()) / (z.max() - z.min()) * 255
+        colors = cv2.applyColorMap(z.astype(np.uint8), cv2.COLORMAP_JET)
+
+        # 创建点云图像
+        point_cloud_img = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        # 随机采样部分点显示（避免过于密集）
+        if len(points) > 10000:
+            indices = np.random.choice(len(points), 10000, replace=False)
+            points = points[indices]
+            colors = colors[indices]
+
+        # 将3D点投影到2D图像
+        x = ((points[:, 0] - points[:, 0].min()) / (points[:, 0].max() - points[:, 0].min()) * 639).astype(int)
+        y = ((points[:, 1] - points[:, 1].min()) / (points[:, 1].max() - points[:, 1].min()) * 479).astype(int)
+
+        # 绘制点
+        for i in range(len(points)):
+            cv2.circle(point_cloud_img, (x[i], y[i]), 1, tuple(map(int, colors[i][0])), -1)
+
+        return point_cloud_img

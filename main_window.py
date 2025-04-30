@@ -5,7 +5,7 @@ import numpy as np
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QComboBox, QPushButton,
                              QTextEdit, QFileDialog, QDialog, QFormLayout,
-                             QSpinBox, QDoubleSpinBox, QMessageBox, QLineEdit)
+                             QSpinBox, QDoubleSpinBox, QMessageBox, QLineEdit, QStackedLayout)
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QImage, QPixmap
 from stereo_vision_processor import StereoVisionProcessor
@@ -35,6 +35,7 @@ class MainWindow(QMainWindow):
 
         # 显示模式
         self.current_mode = "灰度图"
+        self.threeD = None
 
     def setup_ui(self):
         """初始化用户界面"""
@@ -48,28 +49,43 @@ class MainWindow(QMainWindow):
         # 左侧布局 (原始视频)
         left_layout = QVBoxLayout()
 
+        # 设置固定大小的原始视频标签
         self.original_label = QLabel("原始视频")
         self.original_label.setAlignment(Qt.AlignCenter)
         self.original_label.setStyleSheet("border: 1px solid black;")
         self.original_label.setFixedSize(640, 480)
         left_layout.addWidget(self.original_label)
+        left_layout.addStretch()  # 添加拉伸因子保持布局稳定
 
         # 右侧布局 (处理结果)
         right_layout = QVBoxLayout()
 
         # 显示模式选择
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["灰度图", "深度图"])
+        self.mode_combo.addItems(["灰度图", "深度图", "点云"])
         self.mode_combo.currentTextChanged.connect(self.update_display_mode)
         right_layout.addWidget(self.mode_combo)
 
-        # 结果显示
+        # 创建一个容器widget来容纳结果视图
+        self.result_container = QWidget()
+        self.result_container.setFixedSize(640, 480)
+        self.result_layout = QStackedLayout()
+        self.result_container.setLayout(self.result_layout)
+
+        # 添加所有视图到堆叠布局
         self.result_label = QLabel("处理结果")
         self.result_label.setAlignment(Qt.AlignCenter)
         self.result_label.setStyleSheet("border: 1px solid black;")
-        self.result_label.setFixedSize(640, 480)
         self.result_label.mousePressEvent = self.show_distance
-        right_layout.addWidget(self.result_label)
+
+        self.point_cloud_view = QLabel("点云显示")
+        self.point_cloud_view.setAlignment(Qt.AlignCenter)
+        self.point_cloud_view.setStyleSheet("border: 1px solid black;")
+
+        self.result_layout.addWidget(self.result_label)  # 索引0
+        self.result_layout.addWidget(self.point_cloud_view)  # 索引1
+
+        right_layout.addWidget(self.result_container)
 
         # 距离信息
         self.distance_text = QTextEdit()
@@ -211,8 +227,8 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            original, gray_img, depth_img, self.threeD = self.processor.process_frame(frame)
-
+            original, gray_img, depth_img, threeD = self.processor.process_frame(frame)
+            self.threeD = threeD  # 保存当前帧的三维数据
             # 显示原始视频
             original = cv2.cvtColor(original, cv2.COLOR_BGR2RGB)
             height, width, channel = original.shape
@@ -223,24 +239,38 @@ class MainWindow(QMainWindow):
             # 根据模式显示结果
             if self.current_mode == "灰度图":
                 display_img = gray_img
-            else:
+            elif self.current_mode == "深度图":
                 display_img = depth_img
+            else:  # 点云模式
+                point_cloud_img = self.processor.generate_point_cloud(threeD)
+                display_img = point_cloud_img
 
+            # 更新当前显示的视图
+            current_view = self.result_layout.currentWidget()
             height, width, channel = display_img.shape
             bytes_per_line = 3 * width
             q_img = QImage(display_img.data, width, height, bytes_per_line, QImage.Format_RGB888)
-            self.result_label.setPixmap(QPixmap.fromImage(q_img))
-
+            current_view.setPixmap(QPixmap.fromImage(q_img))
         except Exception as e:
             print(f"处理帧时出错: {str(e)}")
 
     def show_distance(self, event):
         """显示点击位置的深度信息"""
-        if self.current_mode == "深度图" and self.threeD is not None:
-            x = event.pos().x()
-            y = event.pos().y()
+        if self.current_mode == "深度图" and hasattr(self, 'threeD') and self.threeD is not None:
+            # 获取标签尺寸和图像尺寸
+            label_size = self.result_label.size()
+            img_height, img_width = self.threeD.shape[:2]
 
-            if 0 <= x < 640 and 0 <= y < 480:
+            # 计算缩放比例
+            scale_x = img_width / label_size.width()
+            scale_y = img_height / label_size.height()
+
+            # 转换坐标
+            x = int(event.pos().x() * scale_x)
+            y = int(event.pos().y() * scale_y)
+
+            # 边界检查
+            if 0 <= x < img_width and 0 <= y < img_height:
                 distance = np.linalg.norm(self.threeD[y][x]) / 1000  # 转换为米
                 self.distance_text.clear()
                 self.distance_text.append(f"点击位置: x={x}, y={y}")
@@ -249,6 +279,10 @@ class MainWindow(QMainWindow):
     def update_display_mode(self, mode):
         """更新显示模式"""
         self.current_mode = mode
+        if mode == "点云":
+            self.result_layout.setCurrentIndex(1)  # 切换到点云视图
+        else:
+            self.result_layout.setCurrentIndex(0)  # 切换到常规结果视图
 
     def closeEvent(self, event):
         """关闭窗口时释放资源"""
