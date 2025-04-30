@@ -1,6 +1,6 @@
 import numpy as np
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QPlainTextEdit, QPushButton, QMessageBox
-from vision_utils import CameraParamsParser
+from Utils.vision_utils import CameraParamsParser
 
 class TemplateInputDialog(QDialog):
     def __init__(self, main_window, parent=None):
