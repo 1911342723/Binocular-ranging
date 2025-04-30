@@ -102,9 +102,29 @@ class MainWindow(QMainWindow):
         dialog = CalibrationDialog(self)
         dialog.exec_()
 
+    def set_manual_calibration(self, left_matrix, left_dist, right_matrix, right_dist, R, T):
+        """设置手动输入的标定参数"""
+        try:
+            # 传递给处理器
+            self.processor.calibrator.set_manual_parameters(
+                left_matrix, left_dist,
+                right_matrix, right_dist,
+                R, T
+            )
+
+            self.calib_status.setText("状态: 已标定 (手动参数)")
+            self.calib_status.setStyleSheet("color: green;")
+            QMessageBox.information(self, "成功", "手动参数设置成功")
+
+        except Exception as e:
+            self.calib_status.setText("状态: 参数错误")
+            self.calib_status.setStyleSheet("color: red;")
+            QMessageBox.critical(self, "标定错误", str(e))
+
     def start_calibration(self, left_dir, right_dir, chessboard_size, square_size):
         """执行相机标定"""
         try:
+            #保存获取的标定相机的参数
             ret = self.processor.calibrate_cameras(
                 left_dir, right_dir,
                 chessboard_size, square_size
